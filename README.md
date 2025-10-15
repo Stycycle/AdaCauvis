@@ -1,8 +1,8 @@
 # Cauvis
-**Towards Single-Source Domain Generalized Object Detection via Causal Visual Prompts**
 
+<div align="center">Towards Single-Source Domain Generalized Object Detection via Causal Visual Prompts</div>
 <div align="center">
-    Chen Li, Huiying Xu, Changxin Gao <sup>*</sup>, Zeyu Wang, Yun Liu, Xinzhong Zhu
+    Chen Li, Huiying Xu, Changxin Gao <sup>*</sup>, Zeyu Wang, Yun Liu, Xinzhong Zhu <br>
     <sup>1</sup> Huazhong University of Science and Technology, 
     <br>
     * Corresponding Author.
@@ -26,10 +26,10 @@
 
 ## Table of Contents
 - [Installation](##installation)
-- [Data Preparation](##Data_Preparation)
-- [Pretrained Weights](##Pretrained_Weights)
+- [Data Preparation](##DataPreparation)
+- [Pretrained Weights](##PretrainedWeights)
 - [Results](##Results)
-- [Train / Eval](##Train-eval)
+- [Train / Eval](##TrainEval)
 
 ## Installation
 ### Pretrained DINOv2 
@@ -56,7 +56,7 @@ pip install -v -e .
 pip install numpy==1.26.0
 ```
 
-## Data_Preparation
+## DataPreparation
 Download the [SDGOD]((https://github.com/AmingWu/Single-DGOD)) dataset and organize it in `dataset` folder as follows:
 ```
 |-- Single-DGOD/
@@ -78,7 +78,7 @@ Download the [SDGOD]((https://github.com/AmingWu/Single-DGOD)) dataset and organ
 |   |-- Night-Sunny/
 ```
 
-## Pretrained_Weights
+## PretrainedWeights
 Comming soon
 
 ## Results
@@ -111,7 +111,7 @@ Comming soon
 |:------:|:----------:|:-----:|:----:|:-----:|:-------:|:-----:|:------:|:----:|:----:|:-----:|:-----:|:------:|:--------:|:----:|:-----:|:----------:|:----:|:------------------------------------------------:|
 | Cauvis | FasterRCNN | 34.4  | 36.5 | 33.3  |  44.3   | 41.1  |  43.1  | 21.6 | 41.1 | 42.3  | 54.8  |  53.9  |   54.0   | 51.2 | 51.3  |    50.4    | 43.6 | [log](resources/bdd100k_c/cauvis_fasterrcnn.log) |
 
-## Train-eval
+## TrainEval
 
 **Train on SDGOD**
 ```shell
