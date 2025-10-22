@@ -1,5 +1,4 @@
-2025/05/12 13:37:47 - mmengine - INFO - 
-2025/05/12 13:38:15 - mmengine - INFO - Epoch(test) [ 50/500]    eta: 0:04:17  time: 0.5713  data_time: 0.0084  memory: 2402  
+2025/05/12 13:38:15 - mmengine - INFO - Epoch(test) [ 50/500]    eta: 0:04:17  time: 0.5713  data_time: 0.0084  memory: 2402
 2025/05/12 13:38:43 - mmengine - INFO - Epoch(test) [100/500]    eta: 0:03:44  time: 0.5513  data_time: 0.0023  memory: 2402  
 2025/05/12 13:39:10 - mmengine - INFO - Epoch(test) [150/500]    eta: 0:03:15  time: 0.5520  data_time: 0.0024  memory: 2402  
 2025/05/12 13:39:38 - mmengine - INFO - Epoch(test) [200/500]    eta: 0:02:47  time: 0.5522  data_time: 0.0024  memory: 2402  

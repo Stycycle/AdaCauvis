@@ -1,6 +1,6 @@
-# Cauvis
+# Cauvis 
+## Towards Single-Source Domain Generalized Object Detection via Causal Visual Prompts
 
-Towards Single-Source Domain Generalized Object Detection via Causal Visual Prompts
 <div align="center">
     Chen Li, Huiying Xu, Changxin Gao <sup>*</sup>, Zeyu Wang, Yun Liu, Xinzhong Zhu <br>
     <sup>1</sup> Huazhong University of Science and Technology, 
@@ -19,6 +19,7 @@ Towards Single-Source Domain Generalized Object Detection via Causal Visual Prom
 ---
 
 ## News
+- **2025-10-22**: Pretrained weights released.
 - **2025-10-15**: Code released; training logs for Cityscapes-C / BDD100K-C are now available.
 - **2025-09-18**: Paper accepted to NeurIPS 2025 🎉
 
@@ -140,13 +141,14 @@ We re-ran the experiments with this codebase on 4×RTX 4090 GPUs and provide the
 
 | Model  | Day Clear | Day Foggy | Dusk Rainy | Night Rainy | Night Clear | Avg. |
 |:------:|:---------:|:---------:|:----------:|:-----------:|:-----------:|:----:| 
-| Cauvis |   74.2    |   56.5    |   65.0    |    47.5     |    60.6     | 60.8 |  
-**Usage**
+| Cauvis |   74.2    |   56.5    |   65.0    |    47.5     |    60.6     | 60.8 | 
+
+**Usage:**
 1. Download the file from the link above.
 2. Place it under `weights/` (create the folder if it doesn’t exist), e.g.: `weights/cauvis_dinohead.pth`
 3. Run evaluation:
 
-```bash
+```shell
 python tools/test.py \
   configs/cauvis/cauvis_dinov2_dinohead_bs1x4_sdgod.py \
   weights/cauvis_dinohead.pth
