@@ -108,6 +108,8 @@ data
 .vscode
 .idea
 .DS_Store
+.agents/
+.codex/
 
 # custom
 *.pkl
@@ -115,9 +117,36 @@ data
 *.log.json
 docs/modelzoo_statistics.md
 mmdet/.mim
+work_dir/
 work_dirs/
 
 # Pytorch
 *.pth
+*.pt
+*.ckpt
+*.onnx
+*.engine
 *.py~
 *.sh~
+
+# Local datasets and model artifacts
+dataset/
+datasets/
+wufan___S-DGOD/
+weights/
+checkpoints/
+
+# Experiment trackers and generated visualization data
+wandb/
+mlruns/
+tensorboard/
+events.out.tfevents*
+
+# Local environment and tool caches
+.ruff_cache/
+.nox/
+.ipynb_checkpoints/
+__MACOSX/
+
+# Accidental shell/package resolver artifacts
+=*

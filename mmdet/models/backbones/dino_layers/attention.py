@@ -71,6 +71,7 @@ class Attention(nn.Module):
 
 class MemEffAttention(Attention):
     def forward(self, x: Tensor, attn_bias=None) -> Tensor:
+        residual = x
         if not XFORMERS_AVAILABLE:
             if attn_bias is not None:
                 raise AssertionError("xFormers is required for using nested tensors")
@@ -81,7 +82,15 @@ class MemEffAttention(Attention):
 
         q, k, v = unbind(qkv, 2)
 
-        x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
+        try:
+            x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
+        except NotImplementedError:
+            if attn_bias is not None:
+                raise
+            warnings.warn(
+                'xFormers attention kernel is unavailable for this runtime; '
+                'falling back to regular PyTorch attention.')
+            return super().forward(residual)
         x = x.reshape([B, N, C])
 
         x = self.proj(x)
