@@ -20,4 +20,6 @@ python tools/train.py \
   default_hooks.checkpoint.interval=1 \
   train_dataloader.batch_size="${BATCH_SIZE}" \
   model.backbone.cauvis_config.min_low_freq_ratio=0.2 \
-  model.backbone.cauvis_config.max_low_freq_ratio=0.2
+  model.backbone.cauvis_config.max_low_freq_ratio=0.2 \
+  model.backbone.cauvis_config.use_2d_fft=False \
+  model.backbone.cauvis_config.learnable_freq=False

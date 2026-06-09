@@ -87,7 +87,7 @@ model = dict(
     num_queries=300,
     backbone=dict(
         cauvis_config=dict(
-            token_length=576,
+            token_length=100,
             img_size=img_scales[0],
         )))
 

@@ -23,12 +23,16 @@ model = dict(
         type="CauvisDINOv2",
         cauvis_config=dict(
             type="Cauvis",
-            token_length=1600,
+            token_length=100,
             img_size=img_scales[0],
             embed_dims=1024,
             num_layers=24,
             patch_size=16,
             link_token_to_query=False,
+            use_2d_fft=True,
+            learnable_freq=True,
+            freq_base=0.20,
+            freq_delta_max=0.05,
         ),
     ),
     bbox_head=dict(num_classes=classes))
@@ -41,7 +45,12 @@ optim_wrapper = dict(
         lr=0.0001,  # 0.0002 for DeformDETR
         weight_decay=0.0001),
     clip_grad=dict(max_norm=0.1, norm_type=2),
-    paramwise_cfg=dict(custom_keys={'backbone': dict(lr_mult=0.1)})
+    paramwise_cfg=dict(custom_keys={
+        'backbone': dict(lr_mult=0.1),
+        # learnable low-freq offset: full base lr (overrides backbone 0.1x).
+        # More specific key wins over 'backbone'; harmless when learnable_freq=False.
+        'cauvis.aux_branch.freq_delta': dict(lr_mult=1.0),
+    })
 )  # custom_keys contains sampling_offsets and reference_points in DeformDETR  # noqa
 
 # learning policy

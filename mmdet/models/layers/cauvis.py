@@ -11,20 +11,42 @@ class AuxiliaryBranch(nn.Module):
                  dims,
                  num_layers,
                  min_low_freq_ratio=0.15,
-                 max_low_freq_ratio=0.42):
+                 max_low_freq_ratio=0.42,
+                 use_2d_fft=False,
+                 learnable_freq=False,
+                 freq_base=0.20,
+                 freq_delta_max=0.05,
+                 freq_softness=1.0):
         super().__init__()
+        self.use_2d_fft = use_2d_fft
+        self.num_layers = num_layers
+        self.learnable_freq = learnable_freq
+        self.freq_base = freq_base
+        self.freq_delta_max = freq_delta_max
+        self.freq_softness = freq_softness
         self.mlp = nn.Sequential(
             nn.Linear(dims, int(dims // 16)),
             nn.Linear(int(dims // 16), dims),
             nn.SiLU(),
         )
+        # Fixed per-layer schedule used when learnable_freq is False (baseline).
         ratios = torch.linspace(min_low_freq_ratio, max_low_freq_ratio,
                                 num_layers)
         self.register_buffer('low_freq_ratios', ratios)
+        # Learnable bounded per-layer offset: r_l = freq_base + freq_delta_max
+        # * tanh(theta_l), so r_l stays in [base - delta_max, base + delta_max].
+        if learnable_freq:
+            self.freq_delta = nn.Parameter(torch.zeros(num_layers))
 
     def _get_low_freq_ratio(self, layer):
         layer = min(max(int(layer), 0), self.low_freq_ratios.numel() - 1)
         return float(self.low_freq_ratios[layer].item())
+
+    def _get_ratio_tensor(self, layer):
+        # Differentiable per-layer ratio centered on freq_base, bounded by tanh.
+        layer = min(max(int(layer), 0), self.num_layers - 1)
+        delta = self.freq_delta_max * torch.tanh(self.freq_delta[layer])
+        return (self.freq_base + delta).clamp(min=1e-6)
 
     def _build_center_mask(self, height, width, ratio, device, dtype):
         side_ratio = math.sqrt(ratio)
@@ -37,12 +59,32 @@ class AuxiliaryBranch(nn.Module):
         mask[h_start:h_start + keep_h, w_start:w_start + keep_w] = 1.0
         return mask
 
-    def _fourier_transform_2d(self, feats, ratio):
+    def _soft_profile(self, length, keep_half, device):
+        # Smooth centered low-pass profile, differentiable in keep_half.
+        coords = torch.arange(length, device=device, dtype=torch.float32)
+        center = (length - 1) / 2.0
+        dist = (coords - center).abs()
+        return torch.sigmoid((keep_half - dist) / self.freq_softness)
+
+    def _build_soft_mask_2d(self, grid, ratio, device, dtype):
+        # Per-axis kept half-width: side = sqrt(ratio) so kept area ~= ratio.
+        keep_half = torch.sqrt(ratio) * grid / 2.0
+        prof = self._soft_profile(grid, keep_half, device)
+        return (prof[:, None] * prof[None, :]).to(dtype)
+
+    def _build_soft_mask_1d(self, length, ratio, device, dtype):
+        keep_half = ratio * length / 2.0
+        return self._soft_profile(length, keep_half, device).to(dtype)
+
+    def _fourier_transform_2d(self, feats, ratio, force=False):
         B, L, C = feats.shape
         grid_size = int(math.sqrt(L))
         if grid_size * grid_size != L:
             return None
-        if feats.is_cuda and feats.dtype == torch.float16 and (
+        # cuFFT only supports power-of-two sizes in fp16. The 2D path always
+        # computes in fp32 (see the .float() cast below), so when explicitly
+        # forced we can safely run it on non-power-of-two grids under AMP.
+        if not force and feats.is_cuda and feats.dtype == torch.float16 and (
                 grid_size & (grid_size - 1)) != 0:
             return None
 
@@ -50,8 +92,12 @@ class AuxiliaryBranch(nn.Module):
         grid_feats = feats.float().reshape(B, grid_size, grid_size, C)
         fft_feats = torch.fft.fft2(grid_feats, dim=(1, 2))
         fft_feats = torch.fft.fftshift(fft_feats, dim=(1, 2))
-        mask = self._build_center_mask(grid_size, grid_size, ratio,
-                                       feats.device, grid_feats.dtype)
+        if torch.is_tensor(ratio):
+            mask = self._build_soft_mask_2d(grid_size, ratio, feats.device,
+                                            grid_feats.dtype)
+        else:
+            mask = self._build_center_mask(grid_size, grid_size, ratio,
+                                           feats.device, grid_feats.dtype)
         masked_fft = fft_feats * mask[None, :, :, None]
         masked_fft = torch.fft.ifftshift(masked_fft, dim=(1, 2))
         ifft_feats = torch.fft.ifft2(masked_fft, dim=(1, 2)).real
@@ -65,20 +111,28 @@ class AuxiliaryBranch(nn.Module):
             next_power_of_two *= 2
 
         out_dtype = feats.dtype
+        learnable = torch.is_tensor(ratio)
         fft_feats = feats
-        if not (feats.is_cuda and feats.dtype == torch.float16):
+        # Soft (learnable) masking needs fp32 for stable gradients.
+        if learnable or not (feats.is_cuda and feats.dtype == torch.float16):
             fft_feats = feats.float()
         padded_feats = torch.nn.functional.pad(
             fft_feats, (0, 0, 0, next_power_of_two - L))
         fft_feats = torch.fft.fft(padded_feats, dim=1)
         fft_feats = torch.fft.fftshift(fft_feats, dim=1)
 
-        mask = torch.zeros(
-            next_power_of_two, dtype=padded_feats.dtype, device=feats.device)
-        mask_width = max(1, int(round(next_power_of_two * ratio)))
-        mask_start = max(0, (next_power_of_two - mask_width) // 2)
-        mask_end = min(next_power_of_two, mask_start + mask_width)
-        mask[mask_start:mask_end] = 1.0
+        if learnable:
+            mask = self._build_soft_mask_1d(next_power_of_two, ratio,
+                                            feats.device, padded_feats.dtype)
+        else:
+            mask = torch.zeros(
+                next_power_of_two,
+                dtype=padded_feats.dtype,
+                device=feats.device)
+            mask_width = max(1, int(round(next_power_of_two * ratio)))
+            mask_start = max(0, (next_power_of_two - mask_width) // 2)
+            mask_end = min(next_power_of_two, mask_start + mask_width)
+            mask[mask_start:mask_end] = 1.0
 
         masked_fft = fft_feats * mask[None, :, None]
         masked_fft = torch.fft.ifftshift(masked_fft, dim=1)
@@ -86,8 +140,11 @@ class AuxiliaryBranch(nn.Module):
         return ifft_feats[:, :L, :].to(out_dtype)
 
     def fourier_transform(self, feats, layer):
-        ratio = self._get_low_freq_ratio(layer)
-        out = self._fourier_transform_2d(feats, ratio)
+        if self.learnable_freq:
+            ratio = self._get_ratio_tensor(layer)
+        else:
+            ratio = self._get_low_freq_ratio(layer)
+        out = self._fourier_transform_2d(feats, ratio, force=self.use_2d_fft)
         if out is not None:
             return out
         return self._fourier_transform_1d(feats, ratio)
@@ -122,7 +179,12 @@ class Cauvis(nn.Module):
                  scale_init: float = 0.001,
                  zero_mlp_delta_f: bool = False,
                  min_low_freq_ratio: float = 0.15,
-                 max_low_freq_ratio: float = 0.42) -> None:
+                 max_low_freq_ratio: float = 0.42,
+                 use_2d_fft: bool = False,
+                 learnable_freq: bool = False,
+                 freq_base: float = 0.20,
+                 freq_delta_max: float = 0.05,
+                 freq_softness: float = 1.0) -> None:
         super().__init__()
         self.num_layers = num_layers
         self.embed_dims = embed_dims
@@ -135,6 +197,11 @@ class Cauvis(nn.Module):
         self.zero_mlp_delta_f = zero_mlp_delta_f
         self.min_low_freq_ratio = min_low_freq_ratio
         self.max_low_freq_ratio = max_low_freq_ratio
+        self.use_2d_fft = use_2d_fft
+        self.learnable_freq = learnable_freq
+        self.freq_base = freq_base
+        self.freq_delta_max = freq_delta_max
+        self.freq_softness = freq_softness
         self.token_embedding = int(img_size // patch_size) * int(img_size //
                                                                  patch_size)
 
@@ -152,7 +219,12 @@ class Cauvis(nn.Module):
             self.embed_dims,
             self.num_layers,
             min_low_freq_ratio=self.min_low_freq_ratio,
-            max_low_freq_ratio=self.max_low_freq_ratio)
+            max_low_freq_ratio=self.max_low_freq_ratio,
+            use_2d_fft=self.use_2d_fft,
+            learnable_freq=self.learnable_freq,
+            freq_base=self.freq_base,
+            freq_delta_max=self.freq_delta_max,
+            freq_softness=self.freq_softness)
 
     def cross_attention(self, x, prompt):
         attn = torch.einsum('bnc,mc->bnm', x, prompt)

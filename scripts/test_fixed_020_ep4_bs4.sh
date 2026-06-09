@@ -22,4 +22,6 @@ python tools/test.py \
   --work-dir "${WORK_DIR}" \
   --cfg-options \
   model.backbone.cauvis_config.min_low_freq_ratio=0.2 \
-  model.backbone.cauvis_config.max_low_freq_ratio=0.2
+  model.backbone.cauvis_config.max_low_freq_ratio=0.2 \
+  model.backbone.cauvis_config.use_2d_fft=False \
+  model.backbone.cauvis_config.learnable_freq=False

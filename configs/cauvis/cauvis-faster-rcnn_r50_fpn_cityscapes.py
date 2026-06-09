@@ -19,7 +19,7 @@ model = dict(backbone=dict(
         type="CauvisDINOv2",
         cauvis_config=dict(
             type="Cauvis",
-            token_length=1600,
+            token_length=100,
             img_size=img_scales[0],
             embed_dims=1024,
             num_layers=24,
