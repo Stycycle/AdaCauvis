@@ -16,7 +16,8 @@ class AuxiliaryBranch(nn.Module):
                  learnable_freq=False,
                  freq_base=0.20,
                  freq_delta_max=0.05,
-                 freq_softness=1.0):
+                 freq_softness=1.0,
+                 learnable_ratio=False):
         super().__init__()
         self.use_2d_fft = use_2d_fft
         self.num_layers = num_layers
@@ -24,23 +25,48 @@ class AuxiliaryBranch(nn.Module):
         self.freq_base = freq_base
         self.freq_delta_max = freq_delta_max
         self.freq_softness = freq_softness
+        self.learnable_ratio = learnable_ratio
         self.mlp = nn.Sequential(
             nn.Linear(dims, int(dims // 16)),
             nn.Linear(int(dims // 16), dims),
             nn.SiLU(),
         )
-        # Fixed per-layer schedule used when learnable_freq is False (baseline).
-        ratios = torch.linspace(min_low_freq_ratio, max_low_freq_ratio,
-                                num_layers)
-        self.register_buffer('low_freq_ratios', ratios)
+        if learnable_ratio == 'range' or learnable_ratio == 'adaptive_range':
+            init_min = max(0.01, min(0.99, min_low_freq_ratio))
+            init_max = max(0.01, min(0.99, max_low_freq_ratio))
+            min_logits = math.log(init_min / (1.0 - init_min))
+            max_logits = math.log(init_max / (1.0 - init_max))
+            self.min_ratio = nn.Parameter(torch.tensor(min_logits))
+            self.max_ratio = nn.Parameter(torch.tensor(max_logits))
+        elif learnable_ratio:
+            init_ratio = 0.2
+            init_logits = math.log(init_ratio / (1.0 - init_ratio))
+            ratios = torch.full((num_layers,), init_logits)
+            self.low_freq_ratios = nn.Parameter(ratios)
+        else:
+            ratios = torch.linspace(min_low_freq_ratio, max_low_freq_ratio,
+                                    num_layers)
+            self.register_buffer('low_freq_ratios', ratios)
+
         # Learnable bounded per-layer offset: r_l = freq_base + freq_delta_max
         # * tanh(theta_l), so r_l stays in [base - delta_max, base + delta_max].
         if learnable_freq:
             self.freq_delta = nn.Parameter(torch.zeros(num_layers))
 
     def _get_low_freq_ratio(self, layer):
-        layer = min(max(int(layer), 0), self.low_freq_ratios.numel() - 1)
-        return float(self.low_freq_ratios[layer].item())
+        layer = min(max(int(layer), 0), self.num_layers - 1)
+        if self.learnable_ratio == 'range' or self.learnable_ratio == 'adaptive_range':
+            min_r = torch.sigmoid(self.min_ratio)
+            max_r = torch.sigmoid(self.max_ratio)
+            if self.num_layers <= 1:
+                return min_r
+            t = layer / (self.num_layers - 1)
+            return min_r + t * (max_r - min_r)
+
+        ratio = self.low_freq_ratios[layer]
+        if self.learnable_ratio:
+            return torch.sigmoid(ratio)
+        return float(ratio.item())
 
     def _get_ratio_tensor(self, layer):
         # Differentiable per-layer ratio centered on freq_base, bounded by tanh.
@@ -68,12 +94,12 @@ class AuxiliaryBranch(nn.Module):
 
     def _build_soft_mask_2d(self, grid, ratio, device, dtype):
         # Per-axis kept half-width: side = sqrt(ratio) so kept area ~= ratio.
-        keep_half = torch.sqrt(ratio) * grid / 2.0
+        keep_half = torch.sqrt(ratio.clamp(min=1e-6)) * grid / 2.0
         prof = self._soft_profile(grid, keep_half, device)
         return (prof[:, None] * prof[None, :]).to(dtype)
 
     def _build_soft_mask_1d(self, length, ratio, device, dtype):
-        keep_half = ratio * length / 2.0
+        keep_half = ratio.clamp(min=1e-6) * length / 2.0
         return self._soft_profile(length, keep_half, device).to(dtype)
 
     def _fourier_transform_2d(self, feats, ratio, force=False):
@@ -140,7 +166,9 @@ class AuxiliaryBranch(nn.Module):
         return ifft_feats[:, :L, :].to(out_dtype)
 
     def fourier_transform(self, feats, layer):
-        if self.learnable_freq:
+        if self.learnable_ratio:
+            ratio = self._get_low_freq_ratio(layer)
+        elif self.learnable_freq:
             ratio = self._get_ratio_tensor(layer)
         else:
             ratio = self._get_low_freq_ratio(layer)
@@ -184,7 +212,8 @@ class Cauvis(nn.Module):
                  learnable_freq: bool = False,
                  freq_base: float = 0.20,
                  freq_delta_max: float = 0.05,
-                 freq_softness: float = 1.0) -> None:
+                 freq_softness: float = 1.0,
+                 learnable_ratio=False) -> None:
         super().__init__()
         self.num_layers = num_layers
         self.embed_dims = embed_dims
@@ -202,6 +231,7 @@ class Cauvis(nn.Module):
         self.freq_base = freq_base
         self.freq_delta_max = freq_delta_max
         self.freq_softness = freq_softness
+        self.learnable_ratio = learnable_ratio
         self.token_embedding = int(img_size // patch_size) * int(img_size //
                                                                  patch_size)
 
@@ -224,7 +254,8 @@ class Cauvis(nn.Module):
             learnable_freq=self.learnable_freq,
             freq_base=self.freq_base,
             freq_delta_max=self.freq_delta_max,
-            freq_softness=self.freq_softness)
+            freq_softness=self.freq_softness,
+            learnable_ratio=self.learnable_ratio)
 
     def cross_attention(self, x, prompt):
         attn = torch.einsum('bnc,mc->bnm', x, prompt)

@@ -4,7 +4,7 @@ classes = 7
 data_root = '/root/autodl-tmp/Cauvis/wufan___S-DGOD/'
 dataset_type = 'SdgodDataset'
 default_hooks = dict(
-    checkpoint=dict(interval=1, type='CheckpointHook'),
+    checkpoint=dict(interval=12, type='CheckpointHook'),
     logger=dict(interval=50, type='LoggerHook'),
     param_scheduler=dict(type='ParamSchedulerHook'),
     sampler_seed=dict(type='DistSamplerSeedHook'),
@@ -15,14 +15,13 @@ env_cfg = dict(
     cudnn_benchmark=False,
     dist_cfg=dict(backend='nccl'),
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0))
-find_unused_parameters = False
 img_scales = (
     640,
     640,
 )
 img_size = 640
 launcher = 'none'
-load_from = None
+load_from = 'work_dir/train_fixed_020_640_ep4_bs4/epoch_4.pth'
 log_level = 'INFO'
 log_processor = dict(by_epoch=True, type='LogProcessor', window_size=50)
 max_epochs = 4
@@ -35,13 +34,15 @@ model = dict(
             freq_base=0.2,
             freq_delta_max=0.05,
             img_size=640,
-            learnable_freq=True,
+            learnable_freq=False,
             link_token_to_query=False,
+            max_low_freq_ratio=0.2,
+            min_low_freq_ratio=0.2,
             num_layers=24,
             patch_size=16,
             token_length=100,
             type='Cauvis',
-            use_2d_fft=True),
+            use_2d_fft=False),
         depth=24,
         embed_dim=1024,
         ffn_bias=True,
@@ -131,14 +132,13 @@ model = dict(
     with_box_refine=True)
 optim_wrapper = dict(
     clip_grad=dict(max_norm=0.1, norm_type=2),
-    loss_scale='dynamic',
     optimizer=dict(lr=0.0001, type='AdamW', weight_decay=0.0001),
     paramwise_cfg=dict(
         custom_keys=dict({
             'backbone': dict(lr_mult=0.1),
             'cauvis.aux_branch.freq_delta': dict(lr_mult=1.0)
         })),
-    type='AmpOptimWrapper')
+    type='OptimWrapper')
 param_scheduler = [
     dict(
         begin=0,
@@ -315,10 +315,10 @@ test_pipeline = [
         ),
         type='PackDetInputs'),
 ]
-train_cfg = dict(max_epochs=4, type='EpochBasedTrainLoop', val_interval=4)
+train_cfg = dict(max_epochs=4, type='EpochBasedTrainLoop', val_interval=12)
 train_dataloader = dict(
     batch_sampler=dict(type='AspectRatioBatchSampler'),
-    batch_size=4,
+    batch_size=2,
     dataset=dict(
         ann_file='daytime_clear/VOC2007/ImageSets/Main/train.txt',
         backend_args=None,
@@ -506,4 +506,4 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-work_dir = 'work_dir/train_layer_adaptive_640_ep4_bs4'
+work_dir = 'work_dir/test_fixed_020_640_ep4_bs4'

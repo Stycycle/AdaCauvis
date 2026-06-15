@@ -32,16 +32,15 @@ model = dict(
         block_chunks=0,
         cauvis_config=dict(
             embed_dims=1024,
-            freq_base=0.2,
-            freq_delta_max=0.05,
             img_size=640,
-            learnable_freq=True,
+            learnable_ratio='range',
             link_token_to_query=False,
+            max_low_freq_ratio=0.42,
+            min_low_freq_ratio=0.15,
             num_layers=24,
             patch_size=16,
-            token_length=100,
-            type='Cauvis',
-            use_2d_fft=True),
+            token_length=1600,
+            type='Cauvis'),
         depth=24,
         embed_dim=1024,
         ffn_bias=True,
@@ -133,11 +132,7 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=0.1, norm_type=2),
     loss_scale='dynamic',
     optimizer=dict(lr=0.0001, type='AdamW', weight_decay=0.0001),
-    paramwise_cfg=dict(
-        custom_keys=dict({
-            'backbone': dict(lr_mult=0.1),
-            'cauvis.aux_branch.freq_delta': dict(lr_mult=1.0)
-        })),
+    paramwise_cfg=dict(custom_keys=dict(backbone=dict(lr_mult=0.1))),
     type='AmpOptimWrapper')
 param_scheduler = [
     dict(
@@ -506,4 +501,4 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-work_dir = 'work_dir/train_layer_adaptive_640_ep4_bs4'
+work_dir = 'work_dir/train_learnable_range_640_ep4_bs4'
