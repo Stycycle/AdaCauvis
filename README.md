@@ -16,7 +16,6 @@
 - [Installation](#installation)
 - [Data Preparation](#data-preparation)
 - [Train / Eval](#train--eval)
-- [Results](#results)
 - [Acknowledgment](#acknowledgment)
 
 ## Method
@@ -30,7 +29,7 @@ AdaCauvis keeps the Cauvis visual-prompt backbone and dual-branch adapter, and c
 | Low-freq ratio | fixed `0.20` | per-layer `r_l = 0.20 + 0.05·tanh(δ_l)`, bounded to `[0.15, 0.25]` |
 | Frequency params | none | `cauvis.aux_branch.freq_delta` trained at full lr (`lr_mult = 1.0`) |
 
-The bounded per-layer offset lets different layers adapt their frequency selection around `0.20` without letting the selection drift into a wide or unstable range. Full method notes, ablation rationale, and the latest experiment results are in [`README_LAYER_ADAPTIVE.md`](README_LAYER_ADAPTIVE.md).
+The bounded per-layer offset lets different layers adapt their frequency selection around `0.20` without letting the selection drift into a wide or unstable range.
 
 ## Installation
 
@@ -95,17 +94,6 @@ bash tools/dist_train.sh configs/cauvis/cauvis_dinov2_dinohead_bs1x4_sdgod.py 8 
 bash tools/dist_test.sh configs/cauvis/cauvis_dinov2_dinohead_bs1x4_sdgod.py path/to/your.pth 8 \
   --work-dir ./work_dir/test_adacauvis
 ```
-
-## Results
-
-4-epoch sanity comparison on SDGOD (mAP per scene). Both rows use `token_length = 100`; the difference is 2D FFT + per-layer adaptive ratio vs. fixed `0.20`.
-
-| Method | Day Clear | Day Foggy | Dusk Rainy | Night Rainy | Night Clear | Mean |
-|---|---:|---:|---:|---:|---:|---:|
-| Fixed-ratio baseline | 69.62 | 52.58 | 60.13 | 42.76 | 56.32 | **56.28** |
-| AdaCauvis (layer-adaptive) | 67.69 | 51.43 | 56.58 | 42.38 | 54.59 | 54.53 |
-
-At 4 epochs the fixed-ratio baseline is still the stronger reference. The layer-adaptive variant should be judged primarily on longer (12-epoch) schedules — see [`README_LAYER_ADAPTIVE.md`](README_LAYER_ADAPTIVE.md) for the up-to-date analysis. Run outputs live under `work_dir/` and are not tracked by git.
 
 ## Acknowledgment
 
