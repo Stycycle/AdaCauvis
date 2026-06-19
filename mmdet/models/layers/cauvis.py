@@ -90,17 +90,26 @@ class AuxiliaryBranch(nn.Module):
         coords = torch.arange(length, device=device, dtype=torch.float32)
         center = (length - 1) / 2.0
         dist = (coords - center).abs()
-        return torch.sigmoid((keep_half - dist) / self.freq_softness)
+        return torch.sigmoid((keep_half - dist) / self.freq_softness), dist
+
+    def _straight_through_mask(self, hard_mask, soft_mask):
+        # Forward uses hard masking; backward follows the soft mask gradient.
+        return hard_mask.detach() - soft_mask.detach() + soft_mask
 
     def _build_soft_mask_2d(self, grid, ratio, device, dtype):
         # Per-axis kept half-width: side = sqrt(ratio) so kept area ~= ratio.
         keep_half = torch.sqrt(ratio.clamp(min=1e-6)) * grid / 2.0
-        prof = self._soft_profile(grid, keep_half, device)
-        return (prof[:, None] * prof[None, :]).to(dtype)
+        prof, dist = self._soft_profile(grid, keep_half, device)
+        soft_mask = prof[:, None] * prof[None, :]
+        hard_prof = (dist <= keep_half).to(soft_mask.dtype)
+        hard_mask = hard_prof[:, None] * hard_prof[None, :]
+        return self._straight_through_mask(hard_mask, soft_mask).to(dtype)
 
     def _build_soft_mask_1d(self, length, ratio, device, dtype):
         keep_half = ratio.clamp(min=1e-6) * length / 2.0
-        return self._soft_profile(length, keep_half, device).to(dtype)
+        soft_mask, dist = self._soft_profile(length, keep_half, device)
+        hard_mask = (dist <= keep_half).to(soft_mask.dtype)
+        return self._straight_through_mask(hard_mask, soft_mask).to(dtype)
 
     def _fourier_transform_2d(self, feats, ratio, force=False):
         B, L, C = feats.shape
