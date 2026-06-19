@@ -111,21 +111,23 @@ work_dir/train_layer_adaptive_640_ep4_bs4/20260613_215253/20260613_215253.log
 
 | 方法 | Daytime Clear | Daytime Foggy | Dusk Rainy | Night Rainy | Night-Sunny | Mean mAP |
 |---|---:|---:|---:|---:|---:|---:|
-| Fixed-ratio baseline | 65.26 | 48.61 | 52.92 | 37.05 | 52.50 | 51.27 |
+| Fixed-ratio baseline | 69.62 | 52.58 | 60.13 | 42.76 | 56.32 | 56.28 |
 | Layer-Adaptive Cauvis | 67.69 | 51.43 | 56.58 | 42.38 | 54.59 | 54.53 |
-| 提升 | +2.43 | +2.82 | +3.66 | +5.33 | +2.09 | +3.26 |
+| 差值 | -1.93 | -1.15 | -3.55 | -0.38 | -1.73 | -1.75 |
 
 ## 结果分析
 
-当前 4 epoch 结果中，Layer-Adaptive Cauvis 将 mean mAP 从 `51.27` 提升到 `54.53`，整体提升 `+3.26`。
+当前 4 epoch 结果中，Layer-Adaptive Cauvis 的 mean mAP 为 `54.53`，低于 fixed-ratio baseline 的 `56.28`，差值为 `-1.75`。
 
-提升最明显的是 `Night Rainy` 场景，从 `37.05` 提升到 `42.38`，增加 `+5.33`。这说明 2D FFT 和小范围 layer-adaptive 低频选择对更强 domain shift 的场景更有帮助。
+分场景看，Layer-Adaptive 在所有场景上都没有超过 fixed 0.20 baseline，其中 `Dusk Rainy` 差距最大，为 `-3.55`。这说明在当前 4 epoch 设置下，小范围 layer-adaptive 低频比例还没有带来收益，固定 `0.20` 反而更稳。
 
-需要注意的是，这个对比里 baseline 和改进方案都使用 `token_length=100`。因此当前收益主要来自：
+需要注意的是，这个对比里 baseline 和改进方案都使用 `token_length=100`。因此当前差异主要来自：
 
-1. 2D FFT 替代 1D/flatten 频域处理。
-2. 每层受控自适应低频比例，而不是所有层固定 `0.20`。
-3. 新增频率偏移参数使用完整学习率，保证短训练周期内能有效更新。
+1. 改进方案启用 2D FFT。
+2. 改进方案把固定 `0.20` 改为每层受控自适应 `0.20 +/- 0.05`。
+3. 新增频率偏移参数使用完整学习率。
+
+从现有 4 epoch 结果看，固定低频比例仍然是更强的参照。后续如果要证明 layer-adaptive 有效，需要重点看 12 epoch 结果，或者进一步检查 `freq_delta` 的学习幅度是否过小、过大或被短训练周期限制。
 
 ## 备注
 
